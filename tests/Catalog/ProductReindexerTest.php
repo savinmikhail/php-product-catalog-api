@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Catalog;
 
 use App\Catalog\Domain\Product;
+use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Indexing\ProductReindexer;
 use App\Catalog\Repository\ProductRepository;
 use PHPUnit\Framework\TestCase;
@@ -34,6 +35,11 @@ final class FakeProductRepository implements ProductRepository
     }
 
     public function all(): array
+    {
+        return $this->products;
+    }
+
+    public function search(ProductFilters $filters): array
     {
         return $this->products;
     }
