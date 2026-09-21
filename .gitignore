@@ -1,5 +1,7 @@
 /vendor/
-/.env
+/app/vendor/
+/.env.local
 /.phpunit.result.cache
+/app/.phpunit.result.cache
 /var/
 .DS_Store
