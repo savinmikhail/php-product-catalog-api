@@ -9,4 +9,4 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 $container = Bootstrap::container();
 
-$container->get(Kernel::class)->handle(Request::fromGlobals())->send();
+$container->get(App\Http\Kernel::class)->handle(Request::fromGlobals())->send();

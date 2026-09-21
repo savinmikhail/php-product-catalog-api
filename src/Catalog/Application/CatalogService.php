@@ -8,6 +8,7 @@ use App\Catalog\Domain\Category;
 use App\Catalog\Domain\Product;
 use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Indexing\ProductIndexer;
+use App\Catalog\Inn\InnValidationStrategy;
 use App\Catalog\Repository\CategoryRepository;
 use App\Catalog\Repository\ProductRepository;
 use App\Shared\Exception\ConflictException;
@@ -20,6 +21,7 @@ final class CatalogService
         private readonly ProductRepository $products,
         private readonly CategoryRepository $categories,
         private readonly ProductIndexer $indexer,
+        private readonly InnValidationStrategy $innValidation,
     ) {
     }
 
@@ -37,6 +39,7 @@ final class CatalogService
     public function createProduct(array $input): Product
     {
         $data = $this->validateProduct($input);
+        $this->innValidation->validate($data['inn']);
         $this->ensureProductIdentityIsAvailable($data['inn'], $data['ean13']);
         $this->ensureCategoriesExist($data['category_ids']);
 
@@ -56,6 +59,7 @@ final class CatalogService
     {
         $current = $this->product($id);
         $data = $this->validateProduct($input, $current);
+        $this->innValidation->validate($data['inn']);
         $this->ensureProductIdentityIsAvailable($data['inn'], $data['ean13'], $id);
         $this->ensureCategoriesExist($data['category_ids']);
 
