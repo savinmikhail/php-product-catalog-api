@@ -1,0 +1,15 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Shared\Http;
+
+use RuntimeException;
+
+final class HttpTransportException extends RuntimeException
+{
+    public function __construct(string $message, public readonly bool $timedOut = false)
+    {
+        parent::__construct($message);
+    }
+}

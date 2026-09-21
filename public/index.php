@@ -5,6 +5,12 @@ declare(strict_types=1);
 use App\Container;
 use App\Catalog\Application\CatalogService;
 use App\Catalog\Http\CategoryController;
+use App\Catalog\Inn\Dadata\DadataHttpClient;
+use App\Catalog\Inn\Dadata\DadataInnValidationStrategy;
+use App\Catalog\Inn\InnValidationCache;
+use App\Catalog\Inn\InnValidationStrategy;
+use App\Catalog\Inn\SystemClock;
+use App\Catalog\Inn\TtlInnValidationCache;
 use App\Catalog\Http\ProductController;
 use App\Catalog\Persistence\PdoCategoryRepository;
 use App\Catalog\Persistence\PdoProductRepository;
@@ -15,6 +21,8 @@ use App\Health\HealthController;
 use App\Http\JsonExceptionHandler;
 use App\Http\Kernel;
 use App\Http\Request;
+use App\Shared\Http\HttpTransport;
+use App\Shared\Http\StreamHttpTransport;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -38,9 +46,26 @@ $container->set(PDO::class, static function (Container $container): PDO {
 });
 $container->set(ProductRepository::class, static fn (Container $container): ProductRepository => new PdoProductRepository($container->get(PDO::class)));
 $container->set(CategoryRepository::class, static fn (Container $container): CategoryRepository => new PdoCategoryRepository($container->get(PDO::class)));
+$container->set(HttpTransport::class, new StreamHttpTransport());
+$container->set(InnValidationCache::class, new TtlInnValidationCache(new SystemClock()));
+$container->set(DadataHttpClient::class, static fn (Container $container): DadataHttpClient => new DadataHttpClient(
+    $container->get(HttpTransport::class),
+    $container->get(Config::class)->string(
+        'DADATA_API_URL',
+        'https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/party',
+    ),
+    $container->get(Config::class)->string('DADATA_API_TOKEN'),
+    $container->get(Config::class)->int('DADATA_HTTP_TIMEOUT', 3),
+));
+$container->set(InnValidationStrategy::class, static fn (Container $container): InnValidationStrategy => new DadataInnValidationStrategy(
+    $container->get(DadataHttpClient::class),
+    $container->get(InnValidationCache::class),
+    $container->get(Config::class)->int('DADATA_INN_CACHE_TTL', 3600),
+));
 $container->set(CatalogService::class, static fn (Container $container): CatalogService => new CatalogService(
     $container->get(ProductRepository::class),
     $container->get(CategoryRepository::class),
+    $container->get(InnValidationStrategy::class),
 ));
 $container->set(ProductController::class, static fn (Container $container): ProductController => new ProductController($container->get(CatalogService::class)));
 $container->set(CategoryController::class, static fn (Container $container): CategoryController => new CategoryController($container->get(CatalogService::class)));

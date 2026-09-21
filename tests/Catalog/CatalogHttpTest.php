@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Catalog;
 
 use App\Catalog\Application\CatalogService;
+use App\Catalog\Inn\InnValidationStrategy;
 use App\Catalog\Http\CategoryController;
 use App\Catalog\Http\ProductController;
 use App\Catalog\Persistence\PdoCategoryRepository;
@@ -12,12 +13,15 @@ use App\Catalog\Persistence\PdoProductRepository;
 use App\Http\JsonExceptionHandler;
 use App\Http\Kernel;
 use App\Http\Request;
+use App\Shared\Exception\ApiException;
+use App\Shared\Exception\InnValidationTimeoutException;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
 final class CatalogHttpTest extends TestCase
 {
     private Kernel $kernel;
+    private RecordingInnValidationStrategy $innValidation;
 
     protected function setUp(): void
     {
@@ -51,7 +55,12 @@ final class CatalogHttpTest extends TestCase
             );
             SQL);
 
-        $catalog = new CatalogService(new PdoProductRepository($pdo), new PdoCategoryRepository($pdo));
+        $this->innValidation = new RecordingInnValidationStrategy();
+        $catalog = new CatalogService(
+            new PdoProductRepository($pdo),
+            new PdoCategoryRepository($pdo),
+            $this->innValidation,
+        );
         $this->kernel = new Kernel(
             new \App\Health\HealthController(),
             new ProductController($catalog),
@@ -142,8 +151,58 @@ final class CatalogHttpTest extends TestCase
         self::assertStringContainsString('999', $invalid->payload['error']['details']['category_ids']);
     }
 
+    public function testProductCreateAndUpdateUseInnValidationStrategy(): void
+    {
+        $created = $this->request('POST', '/products', [
+            'name' => 'Product',
+            'inn' => '7701234567',
+            'ean13' => '4601234567890',
+            'description' => 'Description',
+        ]);
+        $id = $created->payload['data']['id'];
+
+        $this->request('PATCH', '/products/' . $id, [
+            'name' => 'Updated product',
+            'inn' => '7701234568',
+            'ean13' => '4601234567891',
+            'description' => 'Updated description',
+        ]);
+
+        self::assertSame(['7701234567', '7701234568'], $this->innValidation->validated);
+    }
+
+    public function testProductCreateReturnsControlledInnValidationError(): void
+    {
+        $this->innValidation->exception = new InnValidationTimeoutException();
+
+        $response = $this->request('POST', '/products', [
+            'name' => 'Product',
+            'inn' => '7701234567',
+            'ean13' => '4601234567890',
+            'description' => 'Description',
+        ]);
+
+        self::assertSame(504, $response->status);
+        self::assertSame('inn_validation_timeout', $response->payload['error']['code']);
+    }
+
     private function request(string $method, string $path, array $body = []): \App\Http\Response
     {
         return $this->kernel->handle(new Request($method, $path, [], $body));
+    }
+}
+
+final class RecordingInnValidationStrategy implements InnValidationStrategy
+{
+    /** @var list<string> */
+    public array $validated = [];
+    public ?ApiException $exception = null;
+
+    public function validate(string $inn): void
+    {
+        $this->validated[] = $inn;
+        if ($this->exception !== null) {
+            throw $this->exception;
+        }
     }
 }
