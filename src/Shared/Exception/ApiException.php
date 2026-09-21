@@ -8,7 +8,12 @@ use RuntimeException;
 
 class ApiException extends RuntimeException
 {
-    public function __construct(private readonly string $codeName, private readonly int $httpStatus, string $message)
+    public function __construct(
+        private readonly string $codeName,
+        private readonly int $httpStatus,
+        string $message,
+        private readonly array $details = [],
+    )
     {
         parent::__construct($message);
     }
@@ -21,5 +26,10 @@ class ApiException extends RuntimeException
     public function status(): int
     {
         return $this->httpStatus;
+    }
+
+    public function details(): array
+    {
+        return $this->details;
     }
 }
