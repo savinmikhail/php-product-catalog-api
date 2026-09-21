@@ -44,3 +44,5 @@ make reset     УДАЛИТЬ локальные Docker volumes
 MySQL fallback.
 
 Подробные границы модулей и dependency flow: [`docs/architecture.md`](docs/architecture.md).
+
+Исходное тестовое задание: [`docs/test-assignment.pdf`](docs/test-assignment.pdf).
