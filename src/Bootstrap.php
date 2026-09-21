@@ -16,6 +16,9 @@ use App\Catalog\Inn\TtlInnValidationCache;
 use App\Catalog\Indexing\ElasticsearchProductIndexer;
 use App\Catalog\Indexing\ProductIndexer;
 use App\Catalog\Indexing\ProductReindexer;
+use App\Catalog\Read\ElasticsearchProductReadSource;
+use App\Catalog\Read\FallbackProductReadSource;
+use App\Catalog\Read\ProductReadSource;
 use App\Catalog\Persistence\PdoCategoryRepository;
 use App\Catalog\Persistence\PdoProductRepository;
 use App\Catalog\Repository\CategoryRepository;
@@ -82,6 +85,10 @@ final class Bootstrap
         $container->set(ProductIndexer::class, static fn (Container $container): ProductIndexer => new ElasticsearchProductIndexer(
             $container->get(ElasticsearchClient::class),
         ));
+        $container->set(ProductReadSource::class, static fn (Container $container): ProductReadSource => new FallbackProductReadSource(
+            new ElasticsearchProductReadSource($container->get(ElasticsearchClient::class)),
+            $container->get(ProductRepository::class),
+        ));
         $container->set(ProductReindexer::class, static fn (Container $container): ProductReindexer => new ProductReindexer(
             $container->get(ProductRepository::class),
             $container->get(ProductIndexer::class),
@@ -91,6 +98,7 @@ final class Bootstrap
             $container->get(CategoryRepository::class),
             $container->get(ProductIndexer::class),
             $container->get(InnValidationStrategy::class),
+            $container->get(ProductReadSource::class),
         ));
         $container->set(ProductController::class, static fn (Container $container): ProductController => new ProductController($container->get(CatalogService::class)));
         $container->set(CategoryController::class, static fn (Container $container): CategoryController => new CategoryController($container->get(CatalogService::class)));

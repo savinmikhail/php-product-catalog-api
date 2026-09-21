@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Tests\Catalog;
 
 use App\Catalog\Application\CatalogService;
+use App\Catalog\Domain\Product;
+use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Http\CategoryController;
 use App\Catalog\Http\ProductController;
 use App\Catalog\Inn\InnValidationStrategy;
 use App\Catalog\Persistence\PdoCategoryRepository;
 use App\Catalog\Persistence\PdoProductRepository;
+use App\Catalog\Read\ProductReadSource;
+use App\Catalog\Repository\ProductRepository;
 use App\Http\JsonExceptionHandler;
 use App\Http\Kernel;
 use App\Http\Request;
@@ -23,6 +27,7 @@ final class CatalogHttpTest extends TestCase
     private Kernel $kernel;
     private FakeProductIndexer $indexer;
     private RecordingInnValidationStrategy $innValidation;
+    private HttpProductReadSource $readSource;
 
     protected function setUp(): void
     {
@@ -56,13 +61,16 @@ final class CatalogHttpTest extends TestCase
             );
             SQL);
 
+        $products = new PdoProductRepository($pdo);
         $this->indexer = new FakeProductIndexer();
         $this->innValidation = new RecordingInnValidationStrategy();
+        $this->readSource = new HttpProductReadSource($products);
         $catalog = new CatalogService(
-            new PdoProductRepository($pdo),
+            $products,
             new PdoCategoryRepository($pdo),
             $this->indexer,
             $this->innValidation,
+            $this->readSource,
         );
         $this->kernel = new Kernel(
             new \App\Health\HealthController(),
@@ -266,6 +274,19 @@ final class CatalogHttpTest extends TestCase
         self::assertArrayHasKey('category', $invalid->payload['error']['details']);
     }
 
+    public function testProductEndpointsUseConfiguredReadSource(): void
+    {
+        $product = new Product(91, 'From Elasticsearch', '7701234567', '4601234567890', 'Indexed copy');
+        $this->readSource->searchResult = [$product];
+        $this->readSource->findResult = $product;
+
+        $list = $this->request('GET', '/products');
+        $show = $this->request('GET', '/products/91');
+
+        self::assertSame([$product->toArray()], $list->payload['data']);
+        self::assertSame($product->toArray(), $show->payload['data']);
+    }
+
     private function createProduct(string $name, string $inn, string $ean13, array $categoryIds = []): void
     {
         $response = $this->request('POST', '/products', [
@@ -295,6 +316,27 @@ final class CatalogHttpTest extends TestCase
             $method === 'GET' ? $data : $query,
             $method === 'GET' ? [] : $data,
         ));
+    }
+}
+
+final class HttpProductReadSource implements ProductReadSource
+{
+    /** @var list<Product>|null */
+    public ?array $searchResult = null;
+    public ?Product $findResult = null;
+
+    public function __construct(private readonly ProductRepository $fallback)
+    {
+    }
+
+    public function search(ProductFilters $filters): array
+    {
+        return $this->searchResult ?? $this->fallback->search($filters);
+    }
+
+    public function find(int $id): ?Product
+    {
+        return $this->findResult ?? $this->fallback->find($id);
     }
 }
 

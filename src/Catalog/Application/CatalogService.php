@@ -9,6 +9,7 @@ use App\Catalog\Domain\Product;
 use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Indexing\ProductIndexer;
 use App\Catalog\Inn\InnValidationStrategy;
+use App\Catalog\Read\ProductReadSource;
 use App\Catalog\Repository\CategoryRepository;
 use App\Catalog\Repository\ProductRepository;
 use App\Shared\Exception\ConflictException;
@@ -22,18 +23,19 @@ final class CatalogService
         private readonly CategoryRepository $categories,
         private readonly ProductIndexer $indexer,
         private readonly InnValidationStrategy $innValidation,
+        private readonly ?ProductReadSource $readSource = null,
     ) {
     }
 
     /** @return list<Product> */
     public function products(array $query = []): array
     {
-        return $this->products->search($this->productFilters($query));
+        return $this->readSource()->search($this->productFilters($query));
     }
 
     public function product(int $id): Product
     {
-        return $this->products->find($id) ?? throw new NotFoundException('Product not found');
+        return $this->readSource()->find($id) ?? throw new NotFoundException('Product not found');
     }
 
     public function createProduct(array $input): Product
@@ -262,6 +264,11 @@ final class CatalogService
         }
 
         return new ProductFilters($name, $inn, $ean13, $category);
+    }
+
+    private function readSource(): ProductReadSource
+    {
+        return $this->readSource ?? $this->products;
     }
 
     private function filterString(array $query, string $field, array &$errors): ?string

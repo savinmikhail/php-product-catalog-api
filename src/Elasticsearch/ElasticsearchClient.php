@@ -56,6 +56,31 @@ final class ElasticsearchClient
         throw new IndexingException('Product could not be deleted from Elasticsearch');
     }
 
+    /** @param array<string, mixed> $query @return array<string, mixed> */
+    public function search(array $query): array
+    {
+        $response = $this->transport->request('POST', $this->indexPath() . '/_search', $query);
+        if (!$response->isSuccessful()) {
+            throw new IndexingException('Elasticsearch product search failed');
+        }
+
+        return $response->body;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findDocument(int $documentId): ?array
+    {
+        $response = $this->transport->request('GET', $this->documentPath($documentId));
+        if ($response->statusCode === 404 || ($response->body['found'] ?? null) === false) {
+            return null;
+        }
+        if (!$response->isSuccessful() || !is_array($response->body['_source'] ?? null)) {
+            throw new IndexingException('Elasticsearch product lookup failed');
+        }
+
+        return $response->body['_source'];
+    }
+
     private function indexPath(): string
     {
         return '/' . rawurlencode($this->index);

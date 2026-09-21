@@ -6,8 +6,9 @@ namespace App\Catalog\Repository;
 
 use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Domain\Product;
+use App\Catalog\Read\ProductReadSource;
 
-interface ProductRepository
+interface ProductRepository extends ProductReadSource
 {
     /** @return list<Product> */
     public function all(): array;
