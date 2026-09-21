@@ -18,6 +18,7 @@ use PHPUnit\Framework\TestCase;
 final class CatalogHttpTest extends TestCase
 {
     private Kernel $kernel;
+    private FakeProductIndexer $indexer;
 
     protected function setUp(): void
     {
@@ -51,7 +52,8 @@ final class CatalogHttpTest extends TestCase
             );
             SQL);
 
-        $catalog = new CatalogService(new PdoProductRepository($pdo), new PdoCategoryRepository($pdo));
+        $this->indexer = new FakeProductIndexer();
+        $catalog = new CatalogService(new PdoProductRepository($pdo), new PdoCategoryRepository($pdo), $this->indexer);
         $this->kernel = new Kernel(
             new \App\Health\HealthController(),
             new ProductController($catalog),
@@ -78,6 +80,7 @@ final class CatalogHttpTest extends TestCase
         self::assertSame(201, $created->status);
         self::assertSame('API Handbook', $created->payload['data']['name']);
         self::assertCount(2, $created->payload['data']['categories']);
+        self::assertSame('API Handbook', $this->indexer->indexed[0]->name);
 
         $id = $created->payload['data']['id'];
         $read = $this->request('GET', '/products/' . $id);
@@ -92,9 +95,11 @@ final class CatalogHttpTest extends TestCase
         self::assertSame(200, $updated->status);
         self::assertSame('API Handbook, 2nd edition', $updated->payload['data']['name']);
         self::assertCount(1, $updated->payload['data']['categories']);
+        self::assertSame('API Handbook, 2nd edition', $this->indexer->indexed[1]->name);
 
         $deleted = $this->request('DELETE', '/products/' . $id);
         self::assertSame(204, $deleted->status);
+        self::assertSame([$id], $this->indexer->deleted);
         self::assertSame(404, $this->request('GET', '/products/' . $id)->status);
     }
 
@@ -140,6 +145,22 @@ final class CatalogHttpTest extends TestCase
         ]);
         self::assertSame(422, $invalid->status);
         self::assertStringContainsString('999', $invalid->payload['error']['details']['category_ids']);
+    }
+
+    public function testIndexingFailureIsVisibleAfterCatalogWrite(): void
+    {
+        $this->indexer->fail = true;
+
+        $response = $this->request('POST', '/products', [
+            'name' => 'Product',
+            'inn' => '7701234568',
+            'ean13' => '4601234567891',
+            'description' => 'Description',
+        ]);
+
+        self::assertSame(503, $response->status);
+        self::assertSame('indexing_failed', $response->payload['error']['code']);
+        self::assertSame(200, $this->request('GET', '/products/1')->status);
     }
 
     public function testProductsCanBeFilteredByNameEanInnAndCategory(): void
