@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Catalog\Repository;
 
+use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Domain\Product;
 
 interface ProductRepository
 {
     /** @return list<Product> */
     public function all(): array;
+
+    /** @return list<Product> */
+    public function search(ProductFilters $filters): array;
 
     public function find(int $id): ?Product;
 

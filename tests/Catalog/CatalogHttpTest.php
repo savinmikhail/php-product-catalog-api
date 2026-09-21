@@ -142,8 +142,92 @@ final class CatalogHttpTest extends TestCase
         self::assertStringContainsString('999', $invalid->payload['error']['details']['category_ids']);
     }
 
-    private function request(string $method, string $path, array $body = []): \App\Http\Response
+    public function testProductsCanBeFilteredByNameEanInnAndCategory(): void
     {
-        return $this->kernel->handle(new Request($method, $path, [], $body));
+        $food = $this->request('POST', '/categories', ['name' => 'Food']);
+        $books = $this->request('POST', '/categories', ['name' => 'Books']);
+        $foodId = $food->payload['data']['id'];
+        $booksId = $books->payload['data']['id'];
+
+        $this->createProduct('Red Apple', '7701234567', '4601234567890', [$foodId]);
+        $this->createProduct('Green Apple', '7701234568', '4601234567891', [$foodId]);
+        $this->createProduct('Red Book', '7701234569', '4601234567892', [$booksId]);
+
+        self::assertSame(
+            ['Red Apple', 'Green Apple'],
+            $this->productNames($this->request('GET', '/products', ['name' => 'apple'])),
+        );
+        self::assertSame(
+            ['Green Apple'],
+            $this->productNames($this->request('GET', '/products', ['inn' => '7701234568'])),
+        );
+        self::assertSame(
+            ['Red Book'],
+            $this->productNames($this->request('GET', '/products', ['ean13' => '4601234567892'])),
+        );
+        self::assertSame(
+            ['Red Apple', 'Green Apple'],
+            $this->productNames($this->request('GET', '/products', ['category' => (string) $foodId])),
+        );
+        self::assertSame(
+            ['Red Apple'],
+            $this->productNames($this->request('GET', '/products', [
+                'name' => 'red',
+                'inn' => '7701234567',
+                'ean13' => '4601234567890',
+                'category' => (string) $foodId,
+            ])),
+        );
+    }
+
+    public function testProductSearchReturnsEmptyResultsAndJsonForInvalidParameters(): void
+    {
+        $this->createProduct('API Handbook', '7701234567', '4601234567890');
+
+        $empty = $this->request('GET', '/products', ['name' => 'missing']);
+        self::assertSame(200, $empty->status);
+        self::assertSame([], $empty->payload['data']);
+
+        $invalid = $this->request('GET', '/products', [
+            'inn' => '123',
+            'ean13' => 'not-an-ean',
+            'category' => '0',
+        ]);
+        self::assertSame(422, $invalid->status);
+        self::assertSame('validation_error', $invalid->payload['error']['code']);
+        self::assertArrayHasKey('inn', $invalid->payload['error']['details']);
+        self::assertArrayHasKey('ean13', $invalid->payload['error']['details']);
+        self::assertArrayHasKey('category', $invalid->payload['error']['details']);
+    }
+
+    private function createProduct(string $name, string $inn, string $ean13, array $categoryIds = []): void
+    {
+        $response = $this->request('POST', '/products', [
+            'name' => $name,
+            'inn' => $inn,
+            'ean13' => $ean13,
+            'description' => 'Description',
+            'category_ids' => $categoryIds,
+        ]);
+
+        self::assertSame(201, $response->status);
+    }
+
+    /** @return list<string> */
+    private function productNames(\App\Http\Response $response): array
+    {
+        self::assertSame(200, $response->status);
+
+        return array_column($response->payload['data'], 'name');
+    }
+
+    private function request(string $method, string $path, array $data = [], array $query = []): \App\Http\Response
+    {
+        return $this->kernel->handle(new Request(
+            $method,
+            $path,
+            $method === 'GET' ? $data : $query,
+            $method === 'GET' ? [] : $data,
+        ));
     }
 }

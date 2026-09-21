@@ -6,6 +6,7 @@ namespace App\Catalog\Persistence;
 
 use App\Catalog\Domain\Category;
 use App\Catalog\Domain\Product;
+use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Repository\ProductRepository;
 use App\Shared\Exception\ConflictException;
 use PDO;
@@ -19,7 +20,41 @@ final class PdoProductRepository implements ProductRepository
 
     public function all(): array
     {
-        $statement = $this->pdo->query('SELECT id, name, inn, ean13, description FROM products ORDER BY id');
+        return $this->search(new ProductFilters());
+    }
+
+    public function search(ProductFilters $filters): array
+    {
+        $conditions = [];
+        $parameters = [];
+
+        if ($filters->name !== null) {
+            $conditions[] = "LOWER(p.name) LIKE LOWER(:name) ESCAPE '!'";
+            $parameters['name'] = '%' . strtr($filters->name, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        }
+        if ($filters->inn !== null) {
+            $conditions[] = 'p.inn = :inn';
+            $parameters['inn'] = $filters->inn;
+        }
+        if ($filters->ean13 !== null) {
+            $conditions[] = 'p.ean13 = :ean13';
+            $parameters['ean13'] = $filters->ean13;
+        }
+        if ($filters->categoryId !== null) {
+            $conditions[] = 'EXISTS ('
+                . 'SELECT 1 FROM product_categories pc '
+                . 'WHERE pc.product_id = p.id AND pc.category_id = :category_id)';
+            $parameters['category_id'] = $filters->categoryId;
+        }
+
+        $sql = 'SELECT p.id, p.name, p.inn, p.ean13, p.description FROM products p';
+        if ($conditions !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
+        }
+        $sql .= ' ORDER BY p.id';
+
+        $statement = $this->pdo->prepare($sql);
+        $statement->execute($parameters);
 
         return array_map(fn (array $row): Product => $this->hydrate($row), $statement->fetchAll());
     }

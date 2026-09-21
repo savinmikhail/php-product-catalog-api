@@ -6,6 +6,7 @@ namespace App\Catalog\Application;
 
 use App\Catalog\Domain\Category;
 use App\Catalog\Domain\Product;
+use App\Catalog\Domain\ProductFilters;
 use App\Catalog\Repository\CategoryRepository;
 use App\Catalog\Repository\ProductRepository;
 use App\Shared\Exception\ConflictException;
@@ -21,9 +22,9 @@ final class CatalogService
     }
 
     /** @return list<Product> */
-    public function products(): array
+    public function products(array $query = []): array
     {
-        return $this->products->all();
+        return $this->products->search($this->productFilters($query));
     }
 
     public function product(int $id): Product
@@ -219,5 +220,76 @@ final class CatalogService
     private function categoryIds(?Product $product): array
     {
         return $product === null ? [] : array_map(static fn (Category $category): int => $category->id, $product->categories);
+    }
+
+    private function productFilters(array $query): ProductFilters
+    {
+        $errors = [];
+        $allowed = ['name', 'inn', 'ean13', 'category'];
+        foreach (array_keys($query) as $field) {
+            if (!in_array($field, $allowed, true)) {
+                $errors[$field] = 'Unknown filter';
+            }
+        }
+
+        $name = $this->filterString($query, 'name', $errors);
+        $inn = $this->filterString($query, 'inn', $errors);
+        $ean13 = $this->filterString($query, 'ean13', $errors);
+        $category = $this->filterCategory($query, $errors);
+
+        if ($inn !== null && !preg_match('/^\d{10}$/', $inn)) {
+            $errors['inn'] = 'INN must contain exactly 10 digits';
+        }
+        if ($ean13 !== null && !preg_match('/^\d{13}$/', $ean13)) {
+            $errors['ean13'] = 'EAN-13 must contain exactly 13 digits';
+        }
+
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+
+        return new ProductFilters($name, $inn, $ean13, $category);
+    }
+
+    private function filterString(array $query, string $field, array &$errors): ?string
+    {
+        if (!array_key_exists($field, $query)) {
+            return null;
+        }
+        if (!is_string($query[$field])) {
+            $errors[$field] = 'Filter must be a string';
+
+            return null;
+        }
+
+        $value = trim($query[$field]);
+        if ($value === '') {
+            $errors[$field] = 'Filter must not be empty';
+        }
+        if (strlen($value) > 255) {
+            $errors[$field] = 'Filter must not exceed 255 characters';
+        }
+
+        return $value;
+    }
+
+    private function filterCategory(array $query, array &$errors): ?int
+    {
+        if (!array_key_exists('category', $query)) {
+            return null;
+        }
+        $value = $query['category'];
+        if (!is_int($value) && !(is_string($value) && ctype_digit($value))) {
+            $errors['category'] = 'Category must be a positive integer';
+
+            return null;
+        }
+
+        $category = (int) $value;
+        if ($category < 1) {
+            $errors['category'] = 'Category must be a positive integer';
+        }
+
+        return $category;
     }
 }
