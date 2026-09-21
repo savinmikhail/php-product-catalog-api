@@ -6,6 +6,7 @@ namespace App\Catalog\Application;
 
 use App\Catalog\Domain\Category;
 use App\Catalog\Domain\Product;
+use App\Catalog\Indexing\ProductIndexer;
 use App\Catalog\Repository\CategoryRepository;
 use App\Catalog\Repository\ProductRepository;
 use App\Shared\Exception\ConflictException;
@@ -17,6 +18,7 @@ final class CatalogService
     public function __construct(
         private readonly ProductRepository $products,
         private readonly CategoryRepository $categories,
+        private readonly ProductIndexer $indexer,
     ) {
     }
 
@@ -37,13 +39,16 @@ final class CatalogService
         $this->ensureProductIdentityIsAvailable($data['inn'], $data['ean13']);
         $this->ensureCategoriesExist($data['category_ids']);
 
-        return $this->products->create(
+        $product = $this->products->create(
             $data['name'],
             $data['inn'],
             $data['ean13'],
             $data['description'],
             $data['category_ids'],
         );
+        $this->indexer->index($product);
+
+        return $product;
     }
 
     public function updateProduct(int $id, array $input): Product
@@ -53,7 +58,7 @@ final class CatalogService
         $this->ensureProductIdentityIsAvailable($data['inn'], $data['ean13'], $id);
         $this->ensureCategoriesExist($data['category_ids']);
 
-        return $this->products->update(
+        $product = $this->products->update(
             $id,
             $data['name'],
             $data['inn'],
@@ -61,12 +66,16 @@ final class CatalogService
             $data['description'],
             $data['category_ids'],
         );
+        $this->indexer->index($product);
+
+        return $product;
     }
 
     public function deleteProduct(int $id): void
     {
         $this->product($id);
         $this->products->delete($id);
+        $this->indexer->delete($id);
     }
 
     /** @return list<Category> */
