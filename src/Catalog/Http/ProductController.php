@@ -14,9 +14,12 @@ final class ProductController
     {
     }
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        return new Response(['data' => array_map(static fn ($product): array => $product->toArray(), $this->catalog->products())]);
+        return new Response(['data' => array_map(
+            static fn ($product): array => $product->toArray(),
+            $this->catalog->products($request->query),
+        )]);
     }
 
     public function create(Request $request): Response

@@ -30,7 +30,7 @@ final class Kernel
 
             if ($request->path === '/products') {
                 return match ($request->method) {
-                    'GET' => $this->products->index(),
+                    'GET' => $this->products->index($request),
                     'POST' => $this->products->create($request),
                     default => throw new NotFoundException('Route not found'),
                 };
